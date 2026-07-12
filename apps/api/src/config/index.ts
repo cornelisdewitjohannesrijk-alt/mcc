@@ -33,6 +33,11 @@ const envSchema = z.object({
   MESSENGER_APP_SECRET: z.string().optional(),
   MESSENGER_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
 
+  // Web Push (VAPID)
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_MAILTO: z.string().default('mailto:admin@mcc.local'),
+
   // Media Storage (S3-compatible)
   MEDIA_STORAGE_ENDPOINT: z.string().optional(),
   MEDIA_STORAGE_BUCKET: z.string().optional(),

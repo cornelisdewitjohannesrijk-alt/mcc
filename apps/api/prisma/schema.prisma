@@ -164,6 +164,19 @@ model SavedReply {
   @@map("saved_replies")
 }
 
+// ─── PushSubscription ─────────────────────────────────────────────────────────
+// Stores Web Push subscriptions for PWA background notifications
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("push_subscriptions")
+}
+
 // ─── WebhookLog ───────────────────────────────────────────────────────────────
 // Stores raw webhook payloads for debugging and idempotency
 

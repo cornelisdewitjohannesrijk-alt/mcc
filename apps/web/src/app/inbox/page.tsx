@@ -6,6 +6,7 @@ import { api } from '@/lib/api'
 import { connectSocket } from '@/lib/socket'
 import { useInboxStore } from '@/store/inbox.store'
 import { useNotifications } from '@/hooks/useNotifications'
+import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { Sidebar } from '@/components/sidebar/Sidebar'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { WelcomeScreen } from '@/components/chat/WelcomeScreen'
@@ -13,6 +14,7 @@ import { WelcomeScreen } from '@/components/chat/WelcomeScreen'
 export default function InboxPage() {
   const { setConversations, handleWsEvent, activeConversationId } = useInboxStore()
   const { permission, requestPermission, notify } = useNotifications()
+  usePushNotifications()
 
   // Fetch initial conversations
   const { data } = useQuery({

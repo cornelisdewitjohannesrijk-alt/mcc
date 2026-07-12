@@ -7,6 +7,7 @@ import { registry } from '../adapters/registry'
 import { customerService } from './customer.service'
 import { conversationService } from './conversation.service'
 import { mediaService } from './media.service'
+import { sendPushToAll } from './push.service'
 import { isWhatsAppMediaId } from '../adapters/whatsapp.adapter'
 import type { OutgoingMessage } from '../adapters/types'
 
@@ -137,6 +138,15 @@ export class MessageService {
     }
 
     await redis.publish(REDIS_CHANNELS.NEW_MESSAGE, JSON.stringify(event))
+
+    // 9. Push notification (PWA background)
+    const senderName = customer.name ?? normalized.senderId
+    sendPushToAll({
+      title: senderName,
+      body: normalized.text ?? `[${normalized.contentType}]`,
+      icon: '/icons/icon-192.png',
+      data: { conversationId: conversation.id },
+    }).catch(() => {}) // Fire-and-forget; don't let push failures affect the webhook response
   }
 
   /**

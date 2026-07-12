@@ -19,6 +19,7 @@ import { customerRoutes } from './routes/customers.routes'
 import { dashboardRoutes } from './routes/dashboard.routes'
 import { uploadRoutes } from './routes/upload.routes'
 import { savedRepliesRoutes } from './routes/saved-replies.routes'
+import { pushRoutes } from './routes/push.routes'
 
 // ─── Webhooks ─────────────────────────────────────────────────────────────────
 import { whatsappWebhookRoutes } from './webhooks/whatsapp.webhook'
@@ -138,6 +139,7 @@ async function bootstrap() {
       await api.register(dashboardRoutes)
       await api.register(uploadRoutes)
       await api.register(savedRepliesRoutes)
+      await api.register(pushRoutes)
     },
     { prefix: '/api/v1' },
   )
