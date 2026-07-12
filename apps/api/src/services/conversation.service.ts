@@ -1,4 +1,5 @@
 import type { Platform, ConversationStatus } from '@mcc/shared'
+import { Prisma } from '@prisma/client'
 import prisma from '../db/prisma'
 
 export class ConversationService {
@@ -42,7 +43,7 @@ export class ConversationService {
     const { platform, status, unreadOnly, search, page = 1, limit = 30 } = params
     const skip = (page - 1) * limit
 
-    const where: Parameters<typeof prisma.conversation.findMany>[0]['where'] = {}
+    const where: Prisma.ConversationWhereInput = {}
 
     if (platform) where.platform = platform
     if (status) where.status = status

@@ -1,4 +1,5 @@
 import type { NormalizedCustomerProfile, Platform } from '@mcc/shared'
+import { Prisma } from '@prisma/client'
 import prisma from '../db/prisma'
 import { registry } from '../adapters/registry'
 
@@ -63,7 +64,7 @@ export class CustomerService {
     const { search, platform, page = 1, limit = 20 } = params
     const skip = (page - 1) * limit
 
-    const where: Parameters<typeof prisma.customer.findMany>[0]['where'] = {}
+    const where: Prisma.CustomerWhereInput = {}
 
     if (search) {
       where.OR = [

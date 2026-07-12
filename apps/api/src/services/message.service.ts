@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import type { NormalizedMessage, MessageStatus, SendMessagePayload } from '@mcc/shared'
+import { Prisma } from '@prisma/client'
 import prisma from '../db/prisma'
 import { redis, REDIS_CHANNELS } from '../redis/client'
 import { registry } from '../adapters/registry'
@@ -271,7 +272,7 @@ export class MessageService {
   ) {
     const { page = 1, limit = 50, before } = params
 
-    const where: Parameters<typeof prisma.message.findMany>[0]['where'] = {
+    const where: Prisma.MessageWhereInput = {
       conversationId,
     }
 
