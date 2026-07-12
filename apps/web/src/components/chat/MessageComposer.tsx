@@ -309,8 +309,7 @@ export function MessageComposer({ onSend, replyTo, onReplyCancel, disabled, plac
         <div
           ref={repliesRef}
           className="absolute bottom-full left-0 right-0 mx-3 mb-1 rounded-lg shadow-lg overflow-hidden z-10"
-          style={{ border: '1px solid var(--wa-divider)', background: 'var(--wa-panel-bg)' }}
-          style={{ maxHeight: '240px', overflowY: 'auto' }}
+          style={{ border: '1px solid var(--wa-divider)', background: 'var(--wa-panel-bg)', maxHeight: '240px', overflowY: 'auto' }}
         >
           <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide border-b" style={{ color: 'var(--wa-timestamp)', borderColor: 'var(--wa-divider)' }}>
             Saved Replies
