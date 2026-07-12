@@ -66,7 +66,19 @@ async function bootstrap() {
     origin:
       config.NODE_ENV === 'development'
         ? ['http://localhost:3000', 'http://localhost:4000']
-        : [process.env.NEXT_PUBLIC_URL ?? ''],
+        : (origin, cb) => {
+            // Allow all vercel.app subdomains + any custom domain set via env
+            const allowed = [
+              /\.vercel\.app$/,
+              /^https:\/\/mcc/,
+            ]
+            const customOrigin = process.env.NEXT_PUBLIC_URL
+            if (!origin || allowed.some((r) => r.test(origin)) || origin === customOrigin) {
+              cb(null, true)
+            } else {
+              cb(new Error('Not allowed by CORS'), false)
+            }
+          },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   })
