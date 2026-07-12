@@ -9,6 +9,7 @@ import { getSocket } from '@/lib/socket'
 import { MessageBubble, type Message } from './MessageBubble'
 import { DateDivider } from './DateDivider'
 import { MessageComposer } from './MessageComposer'
+import { ForwardModal } from './ForwardModal'
 import { useInboxStore } from '@/store/inbox.store'
 import {
   IconSearch,
@@ -56,6 +57,7 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
   const [windowWarning, setWindowWarning] = useState(false)
   const [windowExpired, setWindowExpired] = useState(false)
   const [replyTo, setReplyTo] = useState<ReplyContext | null>(null)
+  const [forwardMsg, setForwardMsg] = useState<Message | null>(null)
   const setActiveConversation = useInboxStore((s) => s.setActiveConversation)
 
   const { data, isLoading } = useQuery<{ conversation: Conversation }>({
@@ -199,6 +201,7 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
         <MessageBubble
           key={msg.id}
           message={msg}
+          conversationId={conversationId}
           isFirst={isFirst}
           isLast={i === messages.length - 1 || messages[i + 1]?.direction !== msg.direction}
           onReply={(m) => {
@@ -209,6 +212,7 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
               sender: m.direction === 'outbound' ? 'You' : (conversation?.customer.name ?? 'Customer'),
             })
           }}
+          onForward={(m) => setForwardMsg(m)}
         />,
       )
     })
@@ -310,6 +314,14 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
       </div>
 
       {/* ── Composer ─────────────────────────────────────────────────────────── */}
+      {forwardMsg && (
+        <ForwardModal
+          message={forwardMsg}
+          conversationId={conversationId}
+          onClose={() => setForwardMsg(null)}
+        />
+      )}
+
       <MessageComposer
         onSend={(text, mediaUrl, mediaType, mediaFilename, contentType) =>
           sendMutation.mutate({

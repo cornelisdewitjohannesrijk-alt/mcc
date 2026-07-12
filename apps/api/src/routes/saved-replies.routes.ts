@@ -19,7 +19,9 @@ export async function savedRepliesRoutes(app: FastifyInstance) {
     const schema = z.object({
       title: z.string().min(1).max(100),
       shortcut: z.string().min(1).max(50).regex(/^[a-z0-9_-]+$/, 'Shortcut must be lowercase letters, numbers, hyphens or underscores'),
-      text: z.string().min(1).max(4096),
+      text: z.string().max(4096).default(''),
+      mediaUrl: z.string().url().optional(),
+      mediaType: z.string().optional(),
     })
 
     const result = schema.safeParse(req.body)
@@ -45,7 +47,9 @@ export async function savedRepliesRoutes(app: FastifyInstance) {
     const schema = z.object({
       title: z.string().min(1).max(100).optional(),
       shortcut: z.string().min(1).max(50).regex(/^[a-z0-9_-]+$/).optional(),
-      text: z.string().min(1).max(4096).optional(),
+      text: z.string().max(4096).optional(),
+      mediaUrl: z.string().url().optional().nullable(),
+      mediaType: z.string().optional().nullable(),
     })
 
     const result = schema.safeParse(req.body)

@@ -24,6 +24,28 @@
   --wa-send-btn:        #1877f2;
 }
 
+/* ── Dark mode ─────────────────────────────────────────────────────────────── */
+.dark {
+  --wa-header:          #1a2a3a;
+  --wa-header-icon:     rgba(255,255,255,0.6);
+  --wa-panel-bg:        #111827;
+  --wa-chat-bg:         #0f172a;
+  --wa-search-bg:       #1f2937;
+  --wa-hover:           #1f2937;
+  --wa-active:          #1e3a5f;
+  --wa-divider:         #374151;
+  --wa-bubble-out:      #1e3a5f;
+  --wa-bubble-in:       #1f2937;
+  --wa-bubble-out-text: #e5e7eb;
+  --wa-bubble-in-text:  #e5e7eb;
+  --wa-timestamp:       #9ca3af;
+  --wa-unread-bg:       #1877f2;
+  --wa-unread-text:     #ffffff;
+  --wa-tick-read:       #53bdeb;
+  --wa-icon-btn:        #9ca3af;
+  --wa-send-btn:        #1877f2;
+}
+
 /* ── Reset ─────────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 

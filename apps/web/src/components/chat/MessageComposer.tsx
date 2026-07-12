@@ -11,11 +11,14 @@ interface SavedReply {
   title: string
   shortcut: string
   text: string
+  mediaUrl?: string | null
+  mediaType?: string | null
 }
 
 interface FilePreview {
   file: File
   previewUrl: string | null // null for non-images
+  preloadedUrl?: string    // already-uploaded URL (saved reply images); skip re-upload
 }
 
 interface ReplyContext {
@@ -101,6 +104,16 @@ export function MessageComposer({ onSend, replyTo, onReplyCancel, disabled, plac
 
   function insertReply(reply: SavedReply) {
     setText(reply.text)
+    // If saved reply has an image, fetch and set as file preview
+    if (reply.mediaUrl && reply.mediaType) {
+      // Create a synthetic file preview from the URL (no re-upload needed — URL is already stored)
+      // We signal this via a special object so handleSend uses the URL directly
+      setFilePreview({
+        file: new File([], reply.mediaUrl, { type: reply.mediaType }),
+        previewUrl: reply.mediaUrl,
+        preloadedUrl: reply.mediaUrl,
+      })
+    }
     setShowReplies(false)
     setTimeout(() => textareaRef.current?.focus(), 0)
   }
@@ -216,15 +229,22 @@ export function MessageComposer({ onSend, replyTo, onReplyCancel, disabled, plac
     if (!canSend) return
 
     if (filePreview) {
-      // Upload file first
       setUploading(true)
       try {
-        const formData = new FormData()
-        formData.append('file', filePreview.file)
-        const res = await api.post('/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        })
-        const { url, mimeType, filename } = res.data
+        let url: string, mimeType: string, filename: string
+        if (filePreview.preloadedUrl) {
+          // Already uploaded (saved reply) — use the stored URL directly
+          url = filePreview.preloadedUrl
+          mimeType = filePreview.file.type
+          filename = filePreview.file.name
+        } else {
+          const formData = new FormData()
+          formData.append('file', filePreview.file)
+          const res = await api.post('/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          })
+          ;({ url, mimeType, filename } = res.data)
+        }
 
         const contentType = mimeType.startsWith('image/') ? 'image'
           : mimeType.startsWith('video/') ? 'video'
@@ -288,27 +308,39 @@ export function MessageComposer({ onSend, replyTo, onReplyCancel, disabled, plac
       {showReplies && filteredReplies.length > 0 && (
         <div
           ref={repliesRef}
-          className="absolute bottom-full left-0 right-0 mx-3 mb-1 rounded-lg bg-white shadow-lg border border-gray-200 overflow-hidden z-10"
+          className="absolute bottom-full left-0 right-0 mx-3 mb-1 rounded-lg shadow-lg overflow-hidden z-10"
+          style={{ border: '1px solid var(--wa-divider)', background: 'var(--wa-panel-bg)' }}
           style={{ maxHeight: '240px', overflowY: 'auto' }}
         >
-          <div className="px-3 py-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100">
+          <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide border-b" style={{ color: 'var(--wa-timestamp)', borderColor: 'var(--wa-divider)' }}>
             Saved Replies
           </div>
           {filteredReplies.map((reply) => (
             <button
               key={reply.id}
-              className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-gray-50 text-left transition-colors"
+              className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-black/5 text-left transition-colors"
               onMouseDown={(e) => { e.preventDefault(); insertReply(reply) }}
             >
-              <span
-                className="flex-shrink-0 mt-0.5 text-xs font-bold px-1.5 py-0.5 rounded"
-                style={{ background: 'var(--wa-header)', color: 'white', minWidth: '28px', textAlign: 'center' }}
-              >
-                /{reply.shortcut}
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-800 truncate">{reply.title}</p>
-                <p className="text-xs text-gray-500 truncate">{reply.text}</p>
+              {reply.mediaUrl && reply.mediaType?.startsWith('image/') ? (
+                <img src={reply.mediaUrl} alt="" className="h-10 w-10 rounded object-cover flex-shrink-0" />
+              ) : (
+                <span
+                  className="flex-shrink-0 text-xs font-bold px-1.5 py-0.5 rounded"
+                  style={{ background: 'var(--wa-header)', color: 'white', minWidth: '28px', textAlign: 'center' }}
+                >
+                  /{reply.shortcut}
+                </span>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-medium truncate" style={{ color: 'var(--wa-bubble-out-text)' }}>{reply.title}</p>
+                  {reply.mediaUrl && (
+                    <span className="text-xs" style={{ color: 'var(--wa-timestamp)' }}>/{reply.shortcut}</span>
+                  )}
+                </div>
+                <p className="text-xs truncate" style={{ color: 'var(--wa-timestamp)' }}>
+                  {reply.text || (reply.mediaUrl ? '📎 Image' : '')}
+                </p>
               </div>
             </button>
           ))}
@@ -405,7 +437,7 @@ export function MessageComposer({ onSend, replyTo, onReplyCancel, disabled, plac
             />
 
             {/* Text input */}
-            <div className="flex flex-1 items-end rounded-lg bg-white shadow-sm" style={{ border: '1px solid var(--wa-divider)' }}>
+            <div className="flex flex-1 items-end rounded-lg shadow-sm" style={{ border: '1px solid var(--wa-divider)', background: 'var(--wa-panel-bg)' }}>
               <textarea
                 ref={textareaRef}
                 value={text}
@@ -414,8 +446,8 @@ export function MessageComposer({ onSend, replyTo, onReplyCancel, disabled, plac
                 placeholder={filePreview ? 'Add a caption (optional)' : placeholder}
                 rows={1}
                 disabled={disabled}
-                className="flex-1 resize-none bg-transparent px-4 py-2.5 text-sm text-gray-800 outline-none placeholder:text-gray-400 leading-relaxed"
-                style={{ maxHeight: '144px', overflowY: 'auto' }}
+                className="flex-1 resize-none bg-transparent px-4 py-2.5 text-sm outline-none leading-relaxed"
+                style={{ maxHeight: '144px', overflowY: 'auto', color: 'var(--wa-bubble-out-text)' }}
               />
             </div>
 

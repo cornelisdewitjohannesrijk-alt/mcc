@@ -298,10 +298,10 @@ export class WhatsAppAdapter implements ChannelAdapter {
         return { ...base, ...context, type: 'text', text: { body: message.text, preview_url: true } }
 
       case 'image':
-        return { ...base, ...context, type: 'image', image: { link: message.mediaUrl, caption: message.text } }
+        return { ...base, ...context, type: 'image', image: { link: message.mediaUrl, ...(message.text ? { caption: message.text } : {}) } }
 
       case 'video':
-        return { ...base, ...context, type: 'video', video: { link: message.mediaUrl, caption: message.text } }
+        return { ...base, ...context, type: 'video', video: { link: message.mediaUrl, ...(message.text ? { caption: message.text } : {}) } }
 
       case 'audio':
         return { ...base, ...context, type: 'audio', audio: { link: message.mediaUrl } }

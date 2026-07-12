@@ -1,13 +1,11 @@
+import { useState } from 'react'
 import { format } from 'date-fns'
-import { IconCheck, IconCheckSingle, IconReply } from '@/components/icons'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { api } from '@/lib/api'
+import { IconCheck, IconCheckSingle, IconReply, IconStar, IconPin, IconForward } from '@/components/icons'
 
-// In dev, media URLs are stored as ngrok/PUBLIC_URL paths which the browser
-// can't load directly (ngrok shows an interstitial). Rewrite /uploads/ paths
-// to localhost so images load. In production, files are on R2 and the URL
-// is already a public CDN URL — no rewriting needed.
 function displayUrl(url: string | null): string | null {
   if (!url) return null
-  // Only rewrite if it's a local uploads path (dev mode)
   if (url.includes('/uploads/') && !url.includes('r2.') && !url.includes('amazonaws.com')) {
     const filename = url.split('/uploads/')[1]
     return `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'}/uploads/${filename}`
@@ -30,13 +28,17 @@ export interface Message {
   replyToSender?: string | null
   timestamp: string
   status: string | null
+  starred?: boolean
+  pinnedAt?: string | null
 }
 
 interface Props {
   message: Message
-  isFirst: boolean // first in consecutive group from same sender → show tail
-  isLast: boolean  // last in group → show sender name? (for group chats, future)
+  conversationId: string
+  isFirst: boolean
+  isLast: boolean
   onReply?: (message: Message) => void
+  onForward?: (message: Message) => void
 }
 
 function TickIcon({ status }: { status: string | null }) {
@@ -49,32 +51,113 @@ function TickIcon({ status }: { status: string | null }) {
   )
 }
 
-export function MessageBubble({ message, isFirst, onReply }: Props) {
+export function MessageBubble({ message, conversationId, isFirst, onReply, onForward }: Props) {
   const isOut = message.direction === 'outbound'
   const time = format(new Date(message.timestamp), 'HH:mm')
+  const queryClient = useQueryClient()
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const bubbleClass = isOut
     ? isFirst ? 'bubble-out' : 'bubble-out-tail-none'
     : isFirst ? 'bubble-in' : 'bubble-in-tail-none'
 
+  const starMutation = useMutation({
+    mutationFn: (starred: boolean) =>
+      api.patch(`/conversations/${conversationId}/messages/${message.id}/star`, { starred }),
+    onSuccess: (_, starred) => {
+      queryClient.setQueryData(
+        ['conversation', conversationId],
+        (old: { conversation: { messages: Message[] } } | undefined) => {
+          if (!old) return old
+          return {
+            conversation: {
+              ...old.conversation,
+              messages: old.conversation.messages.map((m) =>
+                m.id === message.id ? { ...m, starred } : m,
+              ),
+            },
+          }
+        },
+      )
+    },
+  })
+
+  const pinMutation = useMutation({
+    mutationFn: (pinned: boolean) =>
+      api.patch(`/conversations/${conversationId}/messages/${message.id}/pin`, { pinned }),
+    onSuccess: (_, pinned) => {
+      queryClient.setQueryData(
+        ['conversation', conversationId],
+        (old: { conversation: { messages: Message[] } } | undefined) => {
+          if (!old) return old
+          return {
+            conversation: {
+              ...old.conversation,
+              messages: old.conversation.messages.map((m) =>
+                m.id === message.id ? { ...m, pinnedAt: pinned ? new Date().toISOString() : null } : m,
+              ),
+            },
+          }
+        },
+      )
+    },
+  })
+
   return (
-    <div className={`group flex ${isOut ? 'justify-end' : 'justify-start'} px-4 ${isFirst ? 'mt-2' : 'mt-0.5'} items-end gap-1`}>
-      {/* Reply button — shown on hover, left of bubble for inbound, right side via order for outbound */}
-      {onReply && (
+    <div
+      className={`group flex ${isOut ? 'justify-end' : 'justify-start'} px-4 ${isFirst ? 'mt-2' : 'mt-0.5'} items-end gap-1 relative`}
+      onClick={() => setMenuOpen(false)}
+    >
+      {/* Action buttons — show on hover */}
+      <div
+        className={`opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 mb-1 flex-shrink-0 ${isOut ? 'order-first' : 'order-last'}`}
+      >
+        {onReply && (
+          <button
+            className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-black/5"
+            onClick={() => onReply(message)}
+            title="Reply"
+          >
+            <IconReply size={15} />
+          </button>
+        )}
         <button
-          className={`opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-gray-400 hover:text-gray-600 mb-1 ${isOut ? 'order-first' : 'order-last'}`}
-          onClick={() => onReply(message)}
-          title="Reply"
+          className={`p-1 rounded-full hover:bg-black/5 ${message.starred ? 'text-yellow-400' : 'text-gray-400 hover:text-yellow-400'}`}
+          onClick={() => starMutation.mutate(!message.starred)}
+          title={message.starred ? 'Unstar' : 'Star'}
         >
-          <IconReply size={16} />
+          <IconStar size={15} filled={!!message.starred} />
         </button>
-      )}
+        <button
+          className={`p-1 rounded-full hover:bg-black/5 ${message.pinnedAt ? 'text-blue-400' : 'text-gray-400 hover:text-blue-400'}`}
+          onClick={() => pinMutation.mutate(!message.pinnedAt)}
+          title={message.pinnedAt ? 'Unpin' : 'Pin'}
+        >
+          <IconPin size={15} />
+        </button>
+        {onForward && (
+          <button
+            className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-black/5"
+            onClick={() => onForward(message)}
+            title="Forward"
+          >
+            <IconForward size={15} />
+          </button>
+        )}
+      </div>
+
       <div
         className={`${bubbleClass} relative max-w-[65%] min-w-[80px] shadow-sm`}
-        style={{
-          background: isOut ? 'var(--wa-bubble-out)' : 'var(--wa-bubble-in)',
-        }}
+        style={{ background: isOut ? 'var(--wa-bubble-out)' : 'var(--wa-bubble-in)' }}
       >
+        {/* Pinned indicator */}
+        {message.pinnedAt && (
+          <div className="flex items-center gap-1 px-2 pt-1.5" style={{ color: 'var(--wa-header)' }}>
+            <IconPin size={11} />
+            <span className="text-[10px] font-medium">Pinned</span>
+          </div>
+        )}
+
         {/* Quoted reply preview */}
         {message.replyToText != null && (
           <div
@@ -89,25 +172,22 @@ export function MessageBubble({ message, isFirst, onReply }: Props) {
                 {message.replyToSender}
               </p>
             )}
-            <p className="text-gray-600 truncate">{message.replyToText}</p>
+            <p className="truncate" style={{ color: 'var(--wa-timestamp)' }}>{message.replyToText}</p>
           </div>
         )}
 
         {/* Content */}
         <div className="px-2 pt-1.5 pb-1">
-          {/* Text */}
           {message.contentType === 'text' && (
             <p
               className="text-sm leading-relaxed whitespace-pre-wrap break-words"
               style={{ color: 'var(--wa-bubble-out-text)' }}
             >
               {message.text}
-              {/* Invisible spacer so timestamp doesn't overlap text */}
               <span className="inline-block w-14" aria-hidden />
             </p>
           )}
 
-          {/* Image */}
           {message.contentType === 'image' && message.mediaUrl && (
             <div className="overflow-hidden rounded-md">
               <img
@@ -124,21 +204,14 @@ export function MessageBubble({ message, isFirst, onReply }: Props) {
             </div>
           )}
 
-          {/* Video */}
           {message.contentType === 'video' && message.mediaUrl && (
-            <video
-              src={displayUrl(message.mediaUrl)!}
-              controls
-              className="max-w-full max-h-72 rounded-md"
-            />
+            <video src={displayUrl(message.mediaUrl)!} controls className="max-w-full max-h-72 rounded-md" />
           )}
 
-          {/* Audio */}
           {message.contentType === 'audio' && message.mediaUrl && (
             <audio src={displayUrl(message.mediaUrl)!} controls className="w-52" />
           )}
 
-          {/* Document */}
           {message.contentType === 'document' && (
             <a
               href={displayUrl(message.mediaUrl) ?? '#'}
@@ -153,36 +226,35 @@ export function MessageBubble({ message, isFirst, onReply }: Props) {
               >
                 DOC
               </div>
-              <span className="text-xs text-gray-700 truncate max-w-[150px]">
+              <span className="text-xs truncate max-w-[150px]" style={{ color: 'var(--wa-bubble-out-text)' }}>
                 {message.mediaFilename ?? 'Document'}
               </span>
               <span className="inline-block w-8" aria-hidden />
             </a>
           )}
 
-          {/* Location */}
           {message.contentType === 'location' && (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
+            <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--wa-bubble-out-text)' }}>
               <span>📍</span>
               <span>{message.text ?? 'Location'}</span>
               <span className="inline-block w-10" aria-hidden />
             </div>
           )}
 
-          {/* Unsupported */}
           {message.contentType === 'unsupported' && (
-            <p className="text-xs italic text-gray-400">
+            <p className="text-xs italic" style={{ color: 'var(--wa-timestamp)' }}>
               {message.text ?? 'Unsupported message type'}
               <span className="inline-block w-10" aria-hidden />
             </p>
           )}
         </div>
 
-        {/* Timestamp + status — absolutely positioned bottom-right of bubble */}
+        {/* Timestamp + status */}
         <div
           className="absolute bottom-1 right-2 flex items-center gap-0.5 select-none"
           style={{ color: 'var(--wa-timestamp)' }}
         >
+          {message.starred && <IconStar size={10} filled className="text-yellow-400 mr-0.5" />}
           <span className="text-[10px]">{time}</span>
           {isOut && <TickIcon status={message.status} />}
         </div>

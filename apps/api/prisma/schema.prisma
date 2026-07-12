@@ -137,6 +137,9 @@ model Message {
   replyToMessageId  String?            @map("reply_to_message_id")
   replyToText       String?            @map("reply_to_text")
   replyToSender     String?            @map("reply_to_sender")
+  // User actions
+  starred           Boolean            @default(false)
+  pinnedAt          DateTime?          @map("pinned_at")
   // Delivery tracking
   status            MessageStatus?
   statusUpdatedAt   DateTime?          @map("status_updated_at")
@@ -158,6 +161,8 @@ model SavedReply {
   title     String
   shortcut  String   @unique  // e.g. "hello", "pricing"
   text      String
+  mediaUrl  String?  @map("media_url")
+  mediaType String?  @map("media_type")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

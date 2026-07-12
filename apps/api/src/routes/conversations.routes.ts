@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify'
 import { requireAuth } from '../middleware/auth'
 import { conversationService } from '../services/conversation.service'
 import { messageService } from '../services/message.service'
+import prisma from '../db/prisma'
 
 export async function conversationRoutes(app: FastifyInstance) {
   // All routes require auth
@@ -91,6 +92,48 @@ export async function conversationRoutes(app: FastifyInstance) {
       app.log.error({ err }, 'Failed to send message')
       return reply.code(500).send({ error: message })
     }
+  })
+
+  // ── PATCH /conversations/:id/messages/:msgId/star ─────────────────────────
+  app.patch('/conversations/:id/messages/:msgId/star', async (req, reply) => {
+    const { msgId } = req.params as { id: string; msgId: string }
+    const { starred } = req.body as { starred: boolean }
+    const message = await prisma.message.update({
+      where: { id: msgId },
+      data: { starred },
+    })
+    return reply.send({ message })
+  })
+
+  // ── PATCH /conversations/:id/messages/:msgId/pin ──────────────────────────
+  app.patch('/conversations/:id/messages/:msgId/pin', async (req, reply) => {
+    const { msgId } = req.params as { id: string; msgId: string }
+    const { pinned } = req.body as { pinned: boolean }
+    const message = await prisma.message.update({
+      where: { id: msgId },
+      data: { pinnedAt: pinned ? new Date() : null },
+    })
+    return reply.send({ message })
+  })
+
+  // ── POST /conversations/:id/messages/:msgId/forward ───────────────────────
+  app.post('/conversations/:id/messages/:msgId/forward', async (req, reply) => {
+    const { msgId } = req.params as { id: string; msgId: string }
+    const { targetConversationId } = req.body as { targetConversationId: string }
+
+    const source = await prisma.message.findUnique({ where: { id: msgId } })
+    if (!source) return reply.code(404).send({ error: 'Message not found' })
+
+    await messageService.sendOutgoing({
+      conversationId: targetConversationId,
+      contentType: source.contentType as 'text' | 'image' | 'video' | 'audio' | 'document',
+      text: source.text ?? undefined,
+      mediaUrl: source.mediaUrl ?? undefined,
+      mediaType: source.mediaType ?? undefined,
+      mediaFilename: source.mediaFilename ?? undefined,
+    })
+
+    return reply.code(201).send({ ok: true })
   })
 
   // ── PATCH /conversations/:id/read ─────────────────────────────────────────

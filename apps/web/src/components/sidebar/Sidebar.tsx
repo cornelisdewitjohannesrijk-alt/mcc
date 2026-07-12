@@ -14,8 +14,11 @@ import {
   IconReplies,
   IconFilter,
   IconClose,
+  IconMoon,
+  IconSun,
 } from '@/components/icons'
 import { SavedRepliesModal } from '@/components/SavedRepliesModal'
+import { useTheme } from '@/hooks/useTheme'
 
 type Tab = 'all' | 'whatsapp' | 'messenger' | 'unread'
 
@@ -25,6 +28,7 @@ export function Sidebar() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [showRepliesModal, setShowRepliesModal] = useState(false)
   const router = useRouter()
+  const { theme, toggle: toggleTheme } = useTheme()
 
   const { conversations, activeConversationId, setActiveConversation } = useInboxStore()
 
@@ -76,6 +80,13 @@ export function Sidebar() {
           </button>
           <button className="icon-btn icon-btn-white" title="New chat">
             <IconNewChat size={18} />
+          </button>
+          <button
+            className="icon-btn icon-btn-white"
+            title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+            onClick={toggleTheme}
+          >
+            {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
           </button>
           <button
             className="icon-btn icon-btn-white"
