@@ -264,12 +264,25 @@ export class WhatsAppAdapter implements ChannelAdapter {
     const url = `${GRAPH_API_BASE}/${phoneNumberId}/messages`
     const body = this.buildOutgoingPayload(recipientPhone, message)
 
-    const response = await axios.post(url, body, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-    })
+    let response
+    try {
+      response = await axios.post(url, body, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      })
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response) {
+        // Surface Meta's actual error message (code + message) for easier debugging
+        const meta = err.response.data?.error
+        const detail = meta
+          ? `Meta error ${meta.code}: ${meta.message} (${meta.error_subcode ?? ''})`
+          : JSON.stringify(err.response.data)
+        throw new Error(`WhatsApp API ${err.response.status}: ${detail}`)
+      }
+      throw err
+    }
 
     return response.data.messages?.[0]?.id ?? ''
   }
