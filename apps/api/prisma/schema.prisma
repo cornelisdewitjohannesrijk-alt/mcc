@@ -1,0 +1,184 @@
+// ─── Prisma Schema ─────────────────────────────────────────────────────────────
+// MCC — Multi-Channel Communication Platform
+// ──────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Platform {
+  whatsapp
+  messenger
+}
+
+enum MessageDirection {
+  inbound
+  outbound
+}
+
+enum MessageContentType {
+  text
+  image
+  video
+  audio
+  document
+  sticker
+  location
+  template
+  unsupported
+}
+
+enum MessageStatus {
+  sent
+  delivered
+  read
+  failed
+}
+
+enum ConversationStatus {
+  open
+  resolved
+  pending
+}
+
+enum UserRole {
+  admin
+  agent
+}
+
+// ─── User ─────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  role         UserRole @default(agent)
+  avatarUrl    String?  @map("avatar_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+// ─── Customer ─────────────────────────────────────────────────────────────────
+
+model Customer {
+  id             String    @id @default(cuid())
+  // A customer can have one identity per platform
+  // WhatsApp: phone number in E.164 format
+  // Messenger: PSID (Page-Scoped User ID)
+  whatsappPhone  String?   @unique @map("whatsapp_phone")
+  messengerPsid  String?   @unique @map("messenger_psid")
+  name           String?
+  avatarUrl      String?   @map("avatar_url")
+  firstContactAt DateTime  @default(now()) @map("first_contact_at")
+  lastMessageAt  DateTime? @map("last_message_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  conversations  Conversation[]
+
+  @@map("customers")
+}
+
+// ─── Conversation ─────────────────────────────────────────────────────────────
+
+model Conversation {
+  id            String             @id @default(cuid())
+  customerId    String             @map("customer_id")
+  platform      Platform
+  status        ConversationStatus @default(open)
+  unreadCount   Int                @default(0) @map("unread_count")
+  // WhatsApp: must track 24h customer service window
+  lastCustomerMessageAt DateTime? @map("last_customer_message_at")
+  lastMessageAt DateTime?          @map("last_message_at")
+  lastMessagePreview String?       @map("last_message_preview")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  customer      Customer           @relation(fields: [customerId], references: [id])
+  messages      Message[]
+
+  // One conversation per customer per platform
+  @@unique([customerId, platform])
+  @@index([platform])
+  @@index([status])
+  @@index([lastMessageAt(sort: Desc)])
+  @@map("conversations")
+}
+
+// ─── Message ──────────────────────────────────────────────────────────────────
+
+model Message {
+  id                String             @id @default(cuid())
+  conversationId    String             @map("conversation_id")
+  // The ID returned by Meta's API — used for deduplication and status updates
+  platformMessageId String?            @unique @map("platform_message_id")
+  direction         MessageDirection
+  contentType       MessageContentType @default(text)
+  text              String?
+  // For media messages: the URL where we store the media (our storage, not Meta's expiring URL)
+  mediaUrl          String?            @map("media_url")
+  mediaType         String?            @map("media_type")      // MIME type
+  mediaFilename     String?            @map("media_filename")
+  // For location messages
+  latitude          Float?
+  longitude         Float?
+  locationName      String?            @map("location_name")
+  // Quoted reply
+  replyToMessageId  String?            @map("reply_to_message_id")
+  replyToText       String?            @map("reply_to_text")
+  replyToSender     String?            @map("reply_to_sender")
+  // Delivery tracking
+  status            MessageStatus?
+  statusUpdatedAt   DateTime?          @map("status_updated_at")
+  // When Meta received/sent the message (may differ from createdAt)
+  timestamp         DateTime
+  createdAt         DateTime           @default(now()) @map("created_at")
+
+  conversation      Conversation       @relation(fields: [conversationId], references: [id])
+
+  @@index([conversationId, timestamp(sort: Desc)])
+  @@map("messages")
+}
+
+// ─── SavedReply ───────────────────────────────────────────────────────────────
+// Quick-reply templates — type "/" in composer to search and insert
+
+model SavedReply {
+  id        String   @id @default(cuid())
+  title     String
+  shortcut  String   @unique  // e.g. "hello", "pricing"
+  text      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("saved_replies")
+}
+
+// ─── WebhookLog ───────────────────────────────────────────────────────────────
+// Stores raw webhook payloads for debugging and idempotency
+
+model WebhookLog {
+  id          String   @id @default(cuid())
+  platform    Platform
+  eventType   String   @map("event_type")
+  // Hash of the payload used for deduplication
+  payloadHash String?  @map("payload_hash")
+  payload     Json
+  processed   Boolean  @default(false)
+  error       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([platform, createdAt])
+  @@index([payloadHash])
+  @@map("webhook_logs")
+}

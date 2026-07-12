@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Environment files — NEVER commit secrets
+.env
+.env.local
+.env.production
+.env*.local
+apps/api/.env
+apps/web/.env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads (local dev only — production uses R2)
+apps/api/uploads/
+
+# PWA generated files (built at deploy time)
+apps/web/public/sw.js
+apps/web/public/workbox-*.js
+apps/web/public/sw.js.map
+apps/web/public/workbox-*.js.map
+
+# Prisma
+apps/api/src/generated/
+
+# TypeScript
+*.tsbuildinfo
