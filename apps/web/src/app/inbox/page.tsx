@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { connectSocket } from '@/lib/socket'
 import { useInboxStore } from '@/store/inbox.store'
@@ -14,6 +14,7 @@ import { WelcomeScreen } from '@/components/chat/WelcomeScreen'
 export default function InboxPage() {
   const { setConversations, handleWsEvent, activeConversationId, setActiveConversation } = useInboxStore()
   const { permission, requestPermission, notify } = useNotifications()
+  const queryClient = useQueryClient()
   usePushNotifications()
 
   // ── Swipe-back gesture ────────────────────────────────────────────────────
@@ -73,21 +74,41 @@ export default function InboxPage() {
     const disconnect = connectSocket((event) => {
       handleWsEvent(event)
 
-      if (
-        event.event === 'new_message' &&
-        event.message.direction === 'inbound' &&
-        event.conversationId !== activeConversationId
-      ) {
-        notify(event.conversation.customer.name ?? 'New message', {
-          body: event.message.text ?? `[${event.message.contentType}]`,
-          tag: event.conversationId,
-          onClick: () => useInboxStore.getState().setActiveConversation(event.conversationId),
-        })
+      if (event.event === 'new_message') {
+        // Keep the conversation cache up-to-date for ALL conversations, not just
+        // the open one. This means when the user taps a chat that received a new
+        // message while they were elsewhere, it opens instantly with the latest
+        // messages instead of showing stale data until the 30s staleTime expires.
+        queryClient.setQueryData(
+          ['conversation', event.conversationId],
+          (old: { conversation: { messages: { id: string }[] } } | undefined) => {
+            if (!old) return old // only update if the conversation was already cached
+            if (old.conversation.messages.some((m) => m.id === event.message.id)) return old
+            return {
+              conversation: {
+                ...old.conversation,
+                messages: [...old.conversation.messages, event.message],
+              },
+            }
+          },
+        )
+
+        // Push notification for inbound messages not in the active chat
+        if (
+          event.message.direction === 'inbound' &&
+          event.conversationId !== activeConversationId
+        ) {
+          notify(event.conversation.customer.name ?? 'New message', {
+            body: event.message.text ?? `[${event.message.contentType}]`,
+            tag: event.conversationId,
+            onClick: () => useInboxStore.getState().setActiveConversation(event.conversationId),
+          })
+        }
       }
     })
 
     return disconnect
-  }, [handleWsEvent, notify, activeConversationId])
+  }, [handleWsEvent, notify, activeConversationId, queryClient])
 
   const chatOpen = !!activeConversationId
   // No transition during active finger drag — let it feel instantaneous
