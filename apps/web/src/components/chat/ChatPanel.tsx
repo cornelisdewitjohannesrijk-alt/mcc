@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { isSameDay } from 'date-fns'
 import toast from 'react-hot-toast'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
@@ -20,6 +20,7 @@ import {
   IconBack,
   IconWhatsApp,
   IconMessenger,
+  IconTrash,
 } from '@/components/icons'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -89,6 +90,7 @@ const ITEM_START = 1_000_000
 
 export function ChatPanel({ conversationId }: { conversationId: string }) {
   const virtuosoRef = useRef<VirtuosoHandle>(null)
+  const queryClient = useQueryClient()
   const setActiveConversation = useInboxStore((s) => s.setActiveConversation)
   const conversations = useInboxStore((s) => s.conversations)
   const setConversations = useInboxStore((s) => s.setConversations)
@@ -108,6 +110,13 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
   const [editingName, setEditingName] = useState(false)
   const [nameInput, setNameInput] = useState('')
   const nameInputRef = useRef<HTMLInputElement>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  // Pull-to-refresh
+  const [pullY, setPullY] = useState(0)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const pullStartY = useRef(0)
+  const isAtTopRef = useRef(true)
+  const PULL_THRESHOLD = 70
 
   // ── Fetch conversation metadata + initial messages ─────────────────────────
   const { data, isLoading } = useQuery<{ conversation: Conversation }>({
@@ -158,6 +167,20 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
         if (prev.some((m) => m.id === data.message.id)) return prev
         return [...prev, data.message]
       })
+      // Keep cache in sync so messages persist when leaving and returning
+      queryClient.setQueryData(
+        ['conversation', conversationId],
+        (old: { conversation: Conversation } | undefined) => {
+          if (!old) return old
+          if (old.conversation.messages.some((m) => m.id === data.message.id)) return old
+          return {
+            conversation: {
+              ...old.conversation,
+              messages: [...old.conversation.messages, data.message],
+            },
+          }
+        },
+      )
     }
 
     const onStatus = (data: { platformMessageId: string; status: string }) => {
@@ -277,13 +300,26 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
       }).then((r) => r.data.message as Message),
     onSuccess: (sentMessage) => {
       setReplyTo(null)
-      // Add the sent message immediately — don't wait for the socket event
       if (sentMessage?.id) {
+        // Add immediately to local state
         setLocalMessages((prev) => {
           if (prev.some((m) => m.id === sentMessage.id)) return prev
           return [...prev, sentMessage]
         })
-        // Scroll to the new message
+        // Sync to cache so it persists when user leaves and returns
+        queryClient.setQueryData(
+          ['conversation', conversationId],
+          (old: { conversation: Conversation } | undefined) => {
+            if (!old) return old
+            if (old.conversation.messages.some((m) => m.id === sentMessage.id)) return old
+            return {
+              conversation: {
+                ...old.conversation,
+                messages: [...old.conversation.messages, sentMessage],
+              },
+            }
+          },
+        )
         requestAnimationFrame(() => {
           virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'smooth' })
         })
@@ -295,6 +331,37 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
       toast.error(msg)
     },
   })
+
+  // ── Delete contact ─────────────────────────────────────────────────────────
+  const deleteMutation = useMutation({
+    mutationFn: () => api.delete(`/customers/${conversation?.customer.id}`),
+    onSuccess: () => {
+      setConversations(conversations.filter((c) => c.id !== conversationId))
+      setActiveConversation(null)
+    },
+    onError: () => toast.error('Failed to delete contact'),
+  })
+
+  // ── Pull-to-refresh handlers ───────────────────────────────────────────────
+  function onPullStart(e: React.TouchEvent) {
+    if (!isAtTopRef.current) return
+    pullStartY.current = e.touches[0].clientY
+  }
+
+  function onPullMove(e: React.TouchEvent) {
+    if (!isAtTopRef.current || isRefreshing) return
+    const dy = e.touches[0].clientY - pullStartY.current
+    if (dy > 0) setPullY(Math.min(dy, PULL_THRESHOLD + 20))
+  }
+
+  async function onPullEnd() {
+    if (pullY >= PULL_THRESHOLD && !isRefreshing) {
+      setIsRefreshing(true)
+      await queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] })
+      setIsRefreshing(false)
+    }
+    setPullY(0)
+  }
 
   // ── Loading state ─────────────────────────────────────────────────────────
   if (isLoading || !conversation) {
@@ -372,6 +439,14 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
           <button className="icon-btn" title="Voice call"><IconPhone size={20} /></button>
           <button className="icon-btn" title="Search"><IconSearch size={20} /></button>
           <button className="icon-btn" title="More options"><IconMenu size={20} /></button>
+          <button
+            className="icon-btn"
+            title="Delete contact"
+            onClick={() => setShowDeleteConfirm(true)}
+            style={{ color: '#ef4444' }}
+          >
+            <IconTrash size={18} />
+          </button>
         </div>
       </div>
 
@@ -389,16 +464,68 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
         </div>
       )}
 
-      {/* ── Virtualized message list ───────────────────────────────────────── */}
+      {/* ── Delete confirmation modal ──────────────────────────────────────── */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+          <div className="w-full max-w-sm rounded-2xl p-6 shadow-2xl" style={{ background: 'var(--wa-panel-bg)' }}>
+            <h3 className="text-base font-semibold mb-1" style={{ color: 'var(--wa-bubble-out-text)' }}>Delete contact?</h3>
+            <p className="text-sm mb-5" style={{ color: 'var(--wa-timestamp)' }}>
+              This will permanently delete <strong>{displayName}</strong> and all their messages. This cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                className="flex-1 py-2 rounded-xl text-sm font-medium"
+                style={{ background: 'var(--wa-search-bg)', color: 'var(--wa-bubble-out-text)' }}
+                onClick={() => setShowDeleteConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="flex-1 py-2 rounded-xl text-sm font-medium text-white disabled:opacity-50"
+                style={{ background: '#ef4444' }}
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate()}
+              >
+                {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Virtualized message list with pull-to-refresh ─────────────────── */}
+      <div
+        className="flex-1 flex flex-col overflow-hidden chat-bg relative"
+        onTouchStart={onPullStart}
+        onTouchMove={onPullMove}
+        onTouchEnd={onPullEnd}
+      >
+        {/* Pull indicator */}
+        {(pullY > 0 || isRefreshing) && (
+          <div
+            className="absolute top-0 left-0 right-0 flex items-center justify-center z-10 transition-all"
+            style={{ height: isRefreshing ? 48 : pullY * 0.6, overflow: 'hidden' }}
+          >
+            <div
+              className={`h-7 w-7 rounded-full border-2 ${
+                pullY >= PULL_THRESHOLD || isRefreshing
+                  ? 'border-blue-500 border-t-transparent animate-spin'
+                  : 'border-gray-400 border-t-transparent'
+              }`}
+            />
+          </div>
+        )}
       <Virtuoso
         ref={virtuosoRef}
-        className="flex-1 chat-bg"
+        className="flex-1"
+        style={{ paddingTop: isRefreshing ? 48 : 0 }}
         data={items}
         firstItemIndex={firstItemIndex}
         initialTopMostItemIndex={items.length > 0 ? items.length - 1 : 0}
         followOutput="auto"
         alignToBottom
         startReached={loadMore}
+        atTopStateChange={(atTop) => { isAtTopRef.current = atTop }}
         components={{
           Header: () => loadingMore ? (
             <div className="flex justify-center py-3">
@@ -431,6 +558,7 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
           )
         }}
       />
+      </div>{/* end pull-to-refresh wrapper */}
 
       {/* ── Composer ──────────────────────────────────────────────────────── */}
       {forwardMsg && (

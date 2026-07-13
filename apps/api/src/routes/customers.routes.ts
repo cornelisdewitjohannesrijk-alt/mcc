@@ -51,4 +51,15 @@ export async function customerRoutes(app: FastifyInstance) {
       return reply.code(404).send({ error: 'Customer not found' })
     }
   })
+
+  // ── DELETE /customers/:id ──────────────────────────────────────────────────
+  app.delete('/customers/:id', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    try {
+      await customerService.delete(id)
+      return reply.code(204).send()
+    } catch {
+      return reply.code(404).send({ error: 'Customer not found' })
+    }
+  })
 }

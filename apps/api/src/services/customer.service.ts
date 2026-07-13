@@ -102,6 +102,20 @@ export class CustomerService {
   async update(id: string, data: { name?: string }) {
     return prisma.customer.update({ where: { id }, data })
   }
+
+  async delete(id: string) {
+    // Delete in dependency order (no cascade configured in schema)
+    await prisma.$transaction(async (tx) => {
+      const convIds = (
+        await tx.conversation.findMany({ where: { customerId: id }, select: { id: true } })
+      ).map((c) => c.id)
+      if (convIds.length) {
+        await tx.message.deleteMany({ where: { conversationId: { in: convIds } } })
+        await tx.conversation.deleteMany({ where: { id: { in: convIds } } })
+      }
+      await tx.customer.delete({ where: { id } })
+    })
+  }
 }
 
 export const customerService = new CustomerService()
