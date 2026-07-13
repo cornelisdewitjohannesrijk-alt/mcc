@@ -79,8 +79,8 @@ export async function conversationRoutes(app: FastifyInstance) {
     }
 
     try {
-      await messageService.sendOutgoing({ conversationId: id, ...result.data })
-      return reply.code(201).send({ message: 'Message sent' })
+      const sent = await messageService.sendOutgoing({ conversationId: id, ...result.data })
+      return reply.code(201).send({ message: sent })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to send message'
 

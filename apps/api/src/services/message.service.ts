@@ -152,7 +152,7 @@ export class MessageService {
   /**
    * Sends a message from the dashboard to the customer.
    */
-  async sendOutgoing(payload: SendMessagePayload): Promise<void> {
+  async sendOutgoing(payload: SendMessagePayload): Promise<{ id: string; platformMessageId: string | null; direction: string; contentType: string; text: string | null; mediaUrl: string | null; mediaFilename: string | null; replyToMessageId: string | null; replyToText: string | null; replyToSender: string | null; timestamp: string; status: string }> {
     const conversation = await prisma.conversation.findUnique({
       where: { id: payload.conversationId },
       include: { customer: true },
@@ -248,6 +248,8 @@ export class MessageService {
     }
 
     await redis.publish(REDIS_CHANNELS.NEW_MESSAGE, JSON.stringify(event))
+
+    return event.message
   }
 
   /**

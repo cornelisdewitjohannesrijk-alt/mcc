@@ -98,6 +98,7 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [firstItemIndex, setFirstItemIndex] = useState(ITEM_START)
+  const scrolledToBottomRef = useRef(false)
 
   // ── Other UI state ─────────────────────────────────────────────────────────
   const [windowWarning, setWindowWarning] = useState(false)
@@ -118,20 +119,15 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
 
   const conversation = data?.conversation
 
-  // Populate local messages when conversation first loads or ID changes
-  const initializedRef = useRef<string | null>(null)
+  // Populate local messages when conversation data arrives
+  // conversation?.id as dep: fires once per conversation load (cache or network)
   useEffect(() => {
-    if (!conversation || initializedRef.current === conversationId) return
-    initializedRef.current = conversationId
+    if (!conversation) return
     setLocalMessages(conversation.messages)
     setHasMore(conversation.hasMoreMessages ?? false)
     setFirstItemIndex(ITEM_START)
-  }, [conversation, conversationId])
-
-  // Reset everything when switching conversations
-  useEffect(() => {
-    return () => { initializedRef.current = null }
-  }, [conversationId])
+    scrolledToBottomRef.current = false // arm the scroll-to-bottom
+  }, [conversation?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Mark read ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -222,6 +218,18 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
   // ── Build virtuoso items ───────────────────────────────────────────────────
   const items = useMemo(() => buildItems(localMessages), [localMessages])
 
+  // ── Scroll to bottom once after initial items are rendered ─────────────────
+  useEffect(() => {
+    if (scrolledToBottomRef.current || items.length === 0) return
+    scrolledToBottomRef.current = true
+    // Double rAF: first tick for React state flush, second for Virtuoso render
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'instant' })
+      })
+    })
+  }, [items.length])
+
   // ── Rename mutation ────────────────────────────────────────────────────────
   const renameMutation = useMutation({
     mutationFn: (name: string) =>
@@ -266,8 +274,21 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
         replyToMessageId,
         replyToText: replyToText ?? undefined,
         replyToSender: replyToSender ?? undefined,
-      }),
-    onSuccess: () => setReplyTo(null),
+      }).then((r) => r.data.message as Message),
+    onSuccess: (sentMessage) => {
+      setReplyTo(null)
+      // Add the sent message immediately — don't wait for the socket event
+      if (sentMessage?.id) {
+        setLocalMessages((prev) => {
+          if (prev.some((m) => m.id === sentMessage.id)) return prev
+          return [...prev, sentMessage]
+        })
+        // Scroll to the new message
+        requestAnimationFrame(() => {
+          virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'smooth' })
+        })
+      }
+    },
     onError: (err: unknown) => {
       const msg =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Failed to send'
