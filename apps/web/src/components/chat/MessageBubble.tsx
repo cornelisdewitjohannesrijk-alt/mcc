@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { format } from 'date-fns'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import { IconCheck, IconCheckSingle, IconReply, IconStar, IconPin, IconForward } from '@/components/icons'
+import { IconCheck, IconCheckSingle, IconReply, IconStar, IconForward, IconClose } from '@/components/icons'
 
 function displayUrl(url: string | null): string | null {
   if (!url) return null
@@ -29,7 +29,6 @@ export interface Message {
   timestamp: string
   status: string | null
   starred?: boolean
-  pinnedAt?: string | null
 }
 
 interface Props {
@@ -55,7 +54,7 @@ export function MessageBubble({ message, conversationId, isFirst, onReply, onFor
   const isOut = message.direction === 'outbound'
   const time = format(new Date(message.timestamp), 'HH:mm')
   const queryClient = useQueryClient()
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
   const bubbleClass = isOut
     ? isFirst ? 'bubble-out' : 'bubble-out-tail-none'
@@ -82,31 +81,33 @@ export function MessageBubble({ message, conversationId, isFirst, onReply, onFor
     },
   })
 
-  const pinMutation = useMutation({
-    mutationFn: (pinned: boolean) =>
-      api.patch(`/conversations/${conversationId}/messages/${message.id}/pin`, { pinned }),
-    onSuccess: (_, pinned) => {
-      queryClient.setQueryData(
-        ['conversation', conversationId],
-        (old: { conversation: { messages: Message[] } } | undefined) => {
-          if (!old) return old
-          return {
-            conversation: {
-              ...old.conversation,
-              messages: old.conversation.messages.map((m) =>
-                m.id === message.id ? { ...m, pinnedAt: pinned ? new Date().toISOString() : null } : m,
-              ),
-            },
-          }
-        },
-      )
-    },
-  })
-
   return (
+    <>
+    {/* ── Image lightbox ─────────────────────────────────────────────────────── */}
+    {lightboxUrl && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center"
+        style={{ background: 'rgba(0,0,0,0.9)' }}
+        onClick={() => setLightboxUrl(null)}
+      >
+        <button
+          className="absolute top-4 right-4 text-white/80 hover:text-white p-2 rounded-full hover:bg-white/10"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <IconClose size={24} />
+        </button>
+        <img
+          src={lightboxUrl}
+          alt=""
+          className="max-w-full max-h-full object-contain select-none"
+          style={{ maxWidth: '95vw', maxHeight: '90vh' }}
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    )}
+
     <div
       className={`group flex ${isOut ? 'justify-end' : 'justify-start'} px-4 ${isFirst ? 'mt-2' : 'mt-0.5'} items-end gap-1 relative`}
-      onClick={() => setMenuOpen(false)}
     >
       {/* Action buttons — show on hover */}
       <div
@@ -128,13 +129,6 @@ export function MessageBubble({ message, conversationId, isFirst, onReply, onFor
         >
           <IconStar size={15} filled={!!message.starred} />
         </button>
-        <button
-          className={`p-1 rounded-full hover:bg-black/5 ${message.pinnedAt ? 'text-blue-400' : 'text-gray-400 hover:text-blue-400'}`}
-          onClick={() => pinMutation.mutate(!message.pinnedAt)}
-          title={message.pinnedAt ? 'Unpin' : 'Pin'}
-        >
-          <IconPin size={15} />
-        </button>
         {onForward && (
           <button
             className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-black/5"
@@ -150,14 +144,6 @@ export function MessageBubble({ message, conversationId, isFirst, onReply, onFor
         className={`${bubbleClass} relative max-w-[65%] min-w-[80px] shadow-sm`}
         style={{ background: isOut ? 'var(--wa-bubble-out)' : 'var(--wa-bubble-in)' }}
       >
-        {/* Pinned indicator */}
-        {message.pinnedAt && (
-          <div className="flex items-center gap-1 px-2 pt-1.5" style={{ color: 'var(--wa-header)' }}>
-            <IconPin size={11} />
-            <span className="text-[10px] font-medium">Pinned</span>
-          </div>
-        )}
-
         {/* Quoted reply preview */}
         {message.replyToText != null && (
           <div
@@ -193,7 +179,8 @@ export function MessageBubble({ message, conversationId, isFirst, onReply, onFor
               <img
                 src={displayUrl(message.mediaUrl)!}
                 alt="image"
-                className="max-w-full max-h-72 object-contain rounded-md"
+                className="max-w-full max-h-72 object-contain rounded-md cursor-zoom-in"
+                onClick={(e) => { e.stopPropagation(); setLightboxUrl(displayUrl(message.mediaUrl)!) }}
               />
               {message.text && (
                 <p className="mt-1 text-sm" style={{ color: 'var(--wa-bubble-out-text)' }}>
@@ -260,5 +247,6 @@ export function MessageBubble({ message, conversationId, isFirst, onReply, onFor
         </div>
       </div>
     </div>
+    </>
   )
 }
