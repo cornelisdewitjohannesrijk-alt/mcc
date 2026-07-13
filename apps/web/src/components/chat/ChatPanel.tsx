@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { isSameDay } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -58,7 +58,12 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
   const [windowExpired, setWindowExpired] = useState(false)
   const [replyTo, setReplyTo] = useState<ReplyContext | null>(null)
   const [forwardMsg, setForwardMsg] = useState<Message | null>(null)
+  const [editingName, setEditingName] = useState(false)
+  const [nameInput, setNameInput] = useState('')
+  const nameInputRef = useRef<HTMLInputElement>(null)
   const setActiveConversation = useInboxStore((s) => s.setActiveConversation)
+  const conversations = useInboxStore((s) => s.conversations)
+  const setConversations = useInboxStore((s) => s.setConversations)
 
   const { data, isLoading } = useQuery<{ conversation: Conversation }>({
     queryKey: ['conversation', conversationId],
@@ -137,6 +142,45 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
+
+  const renameMutation = useMutation({
+    mutationFn: (name: string) =>
+      api.patch(`/customers/${conversation?.customer.id}`, { name }),
+    onSuccess: (res) => {
+      const newName = res.data.customer.name
+      // Update the query cache for this conversation
+      queryClient.setQueryData(
+        ['conversation', conversationId],
+        (old: { conversation: Conversation } | undefined) => {
+          if (!old) return old
+          return { conversation: { ...old.conversation, customer: { ...old.conversation.customer, name: newName } } }
+        },
+      )
+      // Update sidebar list
+      setConversations(
+        conversations.map((c) =>
+          c.id === conversationId ? { ...c, customer: { ...c.customer, name: newName } } : c,
+        ),
+      )
+      setEditingName(false)
+    },
+    onError: () => toast.error('Failed to rename'),
+  })
+
+  const startEditing = useCallback(() => {
+    setNameInput(conversation?.customer.name ?? '')
+    setEditingName(true)
+    setTimeout(() => nameInputRef.current?.select(), 0)
+  }, [conversation?.customer.name])
+
+  function commitRename() {
+    const trimmed = nameInput.trim()
+    if (!trimmed || trimmed === conversation?.customer.name) {
+      setEditingName(false)
+      return
+    }
+    renameMutation.mutate(trimmed)
+  }
 
   const sendMutation = useMutation({
     mutationFn: ({
@@ -261,7 +305,30 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
             )}
           </div>
           <div>
-            <p className="text-[15px] font-semibold text-gray-900 leading-tight">{displayName}</p>
+            {editingName ? (
+              <input
+                ref={nameInputRef}
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitRename()
+                  if (e.key === 'Escape') setEditingName(false)
+                }}
+                className="text-[15px] font-semibold rounded px-1 outline-none border-b w-40"
+                style={{ background: 'var(--wa-search-bg)', color: 'var(--wa-bubble-out-text)', borderColor: 'var(--wa-header)' }}
+                autoFocus
+              />
+            ) : (
+              <button
+                className="text-[15px] font-semibold leading-tight hover:underline text-left"
+                style={{ color: 'var(--wa-bubble-out-text)' }}
+                onClick={startEditing}
+                title="Click to rename"
+              >
+                {displayName}
+              </button>
+            )}
             <p className="text-xs flex items-center gap-1" style={{ color: 'var(--wa-timestamp)' }}>
               {platform === 'whatsapp' ? (
                 <><IconWhatsApp size={11} className="text-green-500" /> WhatsApp</>

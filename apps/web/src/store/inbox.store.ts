@@ -7,6 +7,7 @@ interface Conversation {
   unreadCount: number
   lastMessageAt: string | null
   lastMessagePreview: string | null
+  pinnedAt: string | null
   customer: {
     id: string
     name: string | null
@@ -54,9 +55,12 @@ export const useInboxStore = create<InboxStore>((set, get) => ({
                   }
                 : c,
             )
-            .sort((a, b) =>
-              (b.lastMessageAt ?? '').localeCompare(a.lastMessageAt ?? ''),
-            )
+            .sort((a, b) => {
+              // Pinned always float to top
+              if (a.pinnedAt && !b.pinnedAt) return -1
+              if (!a.pinnedAt && b.pinnedAt) return 1
+              return (b.lastMessageAt ?? '').localeCompare(a.lastMessageAt ?? '')
+            })
 
           return { conversations: updated }
         }
@@ -68,6 +72,7 @@ export const useInboxStore = create<InboxStore>((set, get) => ({
           unreadCount: event.conversation.unreadCount,
           lastMessageAt: event.message.timestamp,
           lastMessagePreview: event.message.text ?? `[${event.message.contentType}]`,
+          pinnedAt: null,
           customer: {
             id: event.conversation.customer.id,
             name: event.conversation.customer.name,

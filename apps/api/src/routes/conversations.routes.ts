@@ -136,6 +136,17 @@ export async function conversationRoutes(app: FastifyInstance) {
     return reply.code(201).send({ ok: true })
   })
 
+  // ── PATCH /conversations/:id/pin ──────────────────────────────────────────
+  app.patch('/conversations/:id/pin', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const { pinned } = req.body as { pinned: boolean }
+    const conversation = await prisma.conversation.update({
+      where: { id },
+      data: { pinnedAt: pinned ? new Date() : null },
+    })
+    return reply.send({ conversation })
+  })
+
   // ── PATCH /conversations/:id/read ─────────────────────────────────────────
   app.patch('/conversations/:id/read', async (req, reply) => {
     const { id } = req.params as { id: string }

@@ -97,6 +97,7 @@ model Conversation {
   platform      Platform
   status        ConversationStatus @default(open)
   unreadCount   Int                @default(0) @map("unread_count")
+  pinnedAt      DateTime?          @map("pinned_at")
   // WhatsApp: must track 24h customer service window
   lastCustomerMessageAt DateTime? @map("last_customer_message_at")
   lastMessageAt DateTime?          @map("last_message_at")

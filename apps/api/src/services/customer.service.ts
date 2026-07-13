@@ -99,6 +99,9 @@ export class CustomerService {
       data: { lastMessageAt: timestamp },
     })
   }
+  async update(id: string, data: { name?: string }) {
+    return prisma.customer.update({ where: { id }, data })
+  }
 }
 
 export const customerService = new CustomerService()

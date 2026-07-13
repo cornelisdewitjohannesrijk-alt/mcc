@@ -33,4 +33,22 @@ export async function customerRoutes(app: FastifyInstance) {
 
     return reply.send({ customer })
   })
+
+  // ── PATCH /customers/:id ───────────────────────────────────────────────────
+  app.patch('/customers/:id', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const schema = z.object({
+      name: z.string().min(1).max(200),
+    })
+    const result = schema.safeParse(req.body)
+    if (!result.success) {
+      return reply.code(400).send({ error: 'Invalid input' })
+    }
+    try {
+      const customer = await customerService.update(id, { name: result.data.name })
+      return reply.send({ customer })
+    } catch {
+      return reply.code(404).send({ error: 'Customer not found' })
+    }
+  })
 }
