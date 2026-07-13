@@ -18,14 +18,20 @@ export function connectSocket(onEvent: (event: WsEvent) => void) {
 
   s.connect()
 
-  s.on('new_message', (data) => onEvent({ event: 'new_message', ...data }))
-  s.on('message_status', (data) => onEvent({ event: 'message_status', ...data }))
-  s.on('conversation_updated', (data) => onEvent({ event: 'conversation_updated', ...data }))
+  // Keep named references so cleanup only removes THIS handler, not all handlers
+  // (ChatPanel registers its own listeners on the same socket)
+  const onNewMessage = (data: object) => onEvent({ event: 'new_message', ...(data as Record<string, unknown>) } as WsEvent)
+  const onStatus = (data: object) => onEvent({ event: 'message_status', ...(data as Record<string, unknown>) } as WsEvent)
+  const onConvUpdated = (data: object) => onEvent({ event: 'conversation_updated', ...(data as Record<string, unknown>) } as WsEvent)
+
+  s.on('new_message', onNewMessage)
+  s.on('message_status', onStatus)
+  s.on('conversation_updated', onConvUpdated)
 
   return () => {
-    s.off('new_message')
-    s.off('message_status')
-    s.off('conversation_updated')
-    s.disconnect()
+    s.off('new_message', onNewMessage)
+    s.off('message_status', onStatus)
+    s.off('conversation_updated', onConvUpdated)
+    // Do NOT disconnect — the socket is shared with ChatPanel; keep it alive
   }
 }
