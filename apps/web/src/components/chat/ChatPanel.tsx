@@ -225,7 +225,7 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
     // Double rAF: first tick for React state flush, second for Virtuoso render
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'instant' })
+        virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'auto' })
       })
     })
   }, [items.length])
