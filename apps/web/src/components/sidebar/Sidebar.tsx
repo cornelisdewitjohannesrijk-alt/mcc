@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
@@ -44,7 +44,7 @@ export function Sidebar() {
     refetchInterval: 30_000,
   })
 
-  const filtered = conversations.filter((c) => {
+  const filtered = useMemo(() => conversations.filter((c) => {
     if (tab === 'unread' && c.unreadCount === 0) return false
     if (tab === 'whatsapp' && c.platform !== 'whatsapp') return false
     if (tab === 'messenger' && c.platform !== 'messenger') return false
@@ -55,7 +55,7 @@ export function Sidebar() {
       if (!name.includes(q) && !phone.includes(q)) return false
     }
     return true
-  })
+  }), [conversations, tab, search])
 
   return (
     <div className="flex h-full flex-col" style={{ borderRight: '1px solid var(--wa-divider)' }}>

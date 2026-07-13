@@ -20,16 +20,23 @@ export class ConversationService {
   }
 
   async findById(id: string) {
-    return prisma.conversation.findUnique({
+    const conversation = await prisma.conversation.findUnique({
       where: { id },
-      include: {
-        customer: true,
-        messages: {
-          orderBy: { timestamp: 'asc' },
-          take: 50,
-        },
-      },
+      include: { customer: true },
     })
+    if (!conversation) return null
+
+    // Fetch 51 to detect whether there are older messages beyond the initial page
+    const raw = await prisma.message.findMany({
+      where: { conversationId: id },
+      orderBy: { timestamp: 'desc' },
+      take: 51,
+    })
+
+    const hasMoreMessages = raw.length > 50
+    const messages = raw.slice(0, 50).reverse() // chronological order for display
+
+    return { ...conversation, messages, hasMoreMessages }
   }
 
   async list(params: {

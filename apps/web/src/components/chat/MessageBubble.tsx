@@ -1,7 +1,5 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { format } from 'date-fns'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api'
 import { IconCheck, IconCheckSingle, IconReply, IconStar, IconForward, IconClose } from '@/components/icons'
 
 function displayUrl(url: string | null): string | null {
@@ -33,11 +31,11 @@ export interface Message {
 
 interface Props {
   message: Message
-  conversationId: string
   isFirst: boolean
   isLast: boolean
   onReply?: (message: Message) => void
   onForward?: (message: Message) => void
+  onStar?: (id: string, starred: boolean) => void
 }
 
 function TickIcon({ status }: { status: string | null }) {
@@ -50,203 +48,183 @@ function TickIcon({ status }: { status: string | null }) {
   )
 }
 
-export function MessageBubble({ message, conversationId, isFirst, onReply, onForward }: Props) {
+export const MessageBubble = memo(function MessageBubble({ message, isFirst, onReply, onForward, onStar }: Props) {
   const isOut = message.direction === 'outbound'
   const time = format(new Date(message.timestamp), 'HH:mm')
-  const queryClient = useQueryClient()
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
   const bubbleClass = isOut
     ? isFirst ? 'bubble-out' : 'bubble-out-tail-none'
     : isFirst ? 'bubble-in' : 'bubble-in-tail-none'
 
-  const starMutation = useMutation({
-    mutationFn: (starred: boolean) =>
-      api.patch(`/conversations/${conversationId}/messages/${message.id}/star`, { starred }),
-    onSuccess: (_, starred) => {
-      queryClient.setQueryData(
-        ['conversation', conversationId],
-        (old: { conversation: { messages: Message[] } } | undefined) => {
-          if (!old) return old
-          return {
-            conversation: {
-              ...old.conversation,
-              messages: old.conversation.messages.map((m) =>
-                m.id === message.id ? { ...m, starred } : m,
-              ),
-            },
-          }
-        },
-      )
-    },
-  })
-
   return (
     <>
-    {/* ── Image lightbox ─────────────────────────────────────────────────────── */}
-    {lightboxUrl && (
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center"
-        style={{ background: 'rgba(0,0,0,0.9)' }}
-        onClick={() => setLightboxUrl(null)}
-      >
-        <button
-          className="absolute top-4 right-4 text-white/80 hover:text-white p-2 rounded-full hover:bg-white/10"
+      {/* ── Image lightbox ─────────────────────────────────────────────────── */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.9)' }}
           onClick={() => setLightboxUrl(null)}
         >
-          <IconClose size={24} />
-        </button>
-        <img
-          src={lightboxUrl}
-          alt=""
-          className="max-w-full max-h-full object-contain select-none"
-          style={{ maxWidth: '95vw', maxHeight: '90vh' }}
-          onClick={(e) => e.stopPropagation()}
-        />
-      </div>
-    )}
-
-    <div
-      className={`group flex ${isOut ? 'justify-end' : 'justify-start'} px-4 ${isFirst ? 'mt-2' : 'mt-0.5'} items-end gap-1 relative`}
-    >
-      {/* Action buttons — show on hover */}
-      <div
-        className={`opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 mb-1 flex-shrink-0 ${isOut ? 'order-first' : 'order-last'}`}
-      >
-        {onReply && (
           <button
-            className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-black/5"
-            onClick={() => onReply(message)}
-            title="Reply"
+            className="absolute top-4 right-4 text-white/80 hover:text-white p-2 rounded-full hover:bg-white/10"
+            onClick={() => setLightboxUrl(null)}
           >
-            <IconReply size={15} />
+            <IconClose size={24} />
           </button>
-        )}
-        <button
-          className={`p-1 rounded-full hover:bg-black/5 ${message.starred ? 'text-yellow-400' : 'text-gray-400 hover:text-yellow-400'}`}
-          onClick={() => starMutation.mutate(!message.starred)}
-          title={message.starred ? 'Unstar' : 'Star'}
+          <img
+            src={lightboxUrl}
+            alt=""
+            className="max-w-full max-h-full object-contain select-none"
+            style={{ maxWidth: '95vw', maxHeight: '90vh' }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
+      <div
+        className={`group flex ${isOut ? 'justify-end' : 'justify-start'} px-4 ${isFirst ? 'mt-2' : 'mt-0.5'} items-end gap-1 relative`}
+      >
+        {/* Action buttons — show on hover */}
+        <div
+          className={`opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 mb-1 flex-shrink-0 ${isOut ? 'order-first' : 'order-last'}`}
         >
-          <IconStar size={15} filled={!!message.starred} />
-        </button>
-        {onForward && (
-          <button
-            className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-black/5"
-            onClick={() => onForward(message)}
-            title="Forward"
-          >
-            <IconForward size={15} />
-          </button>
-        )}
-      </div>
-
-      <div
-        className={`${bubbleClass} relative max-w-[65%] min-w-[80px] shadow-sm`}
-        style={{ background: isOut ? 'var(--wa-bubble-out)' : 'var(--wa-bubble-in)' }}
-      >
-        {/* Quoted reply preview */}
-        {message.replyToText != null && (
-          <div
-            className="mx-2 mt-1.5 rounded px-2 py-1 text-xs border-l-2"
-            style={{
-              background: isOut ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.05)',
-              borderLeftColor: 'var(--wa-header)',
-            }}
-          >
-            {message.replyToSender && (
-              <p className="font-semibold truncate" style={{ color: 'var(--wa-header)' }}>
-                {message.replyToSender}
-              </p>
-            )}
-            <p className="truncate" style={{ color: 'var(--wa-timestamp)' }}>{message.replyToText}</p>
-          </div>
-        )}
-
-        {/* Content */}
-        <div className="px-2 pt-1.5 pb-1">
-          {message.contentType === 'text' && (
-            <p
-              className="text-sm leading-relaxed whitespace-pre-wrap break-words"
-              style={{ color: 'var(--wa-bubble-out-text)' }}
+          {onReply && (
+            <button
+              className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-black/5"
+              onClick={() => onReply(message)}
+              title="Reply"
             >
-              {message.text}
-              <span className="inline-block w-14" aria-hidden />
-            </p>
+              <IconReply size={15} />
+            </button>
           )}
+          {onStar && (
+            <button
+              className={`p-1 rounded-full hover:bg-black/5 ${message.starred ? 'text-yellow-400' : 'text-gray-400 hover:text-yellow-400'}`}
+              onClick={() => onStar(message.id, !message.starred)}
+              title={message.starred ? 'Unstar' : 'Star'}
+            >
+              <IconStar size={15} filled={!!message.starred} />
+            </button>
+          )}
+          {onForward && (
+            <button
+              className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-black/5"
+              onClick={() => onForward(message)}
+              title="Forward"
+            >
+              <IconForward size={15} />
+            </button>
+          )}
+        </div>
 
-          {message.contentType === 'image' && message.mediaUrl && (
-            <div className="overflow-hidden rounded-md">
-              <img
-                src={displayUrl(message.mediaUrl)!}
-                alt="image"
-                className="max-w-full max-h-72 object-contain rounded-md cursor-zoom-in"
-                onClick={(e) => { e.stopPropagation(); setLightboxUrl(displayUrl(message.mediaUrl)!) }}
-              />
-              {message.text && (
-                <p className="mt-1 text-sm" style={{ color: 'var(--wa-bubble-out-text)' }}>
-                  {message.text}
-                  <span className="inline-block w-14" aria-hidden />
+        <div
+          className={`${bubbleClass} relative max-w-[65%] min-w-[80px] shadow-sm`}
+          style={{ background: isOut ? 'var(--wa-bubble-out)' : 'var(--wa-bubble-in)' }}
+        >
+          {/* Quoted reply preview */}
+          {message.replyToText != null && (
+            <div
+              className="mx-2 mt-1.5 rounded px-2 py-1 text-xs border-l-2"
+              style={{
+                background: isOut ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.05)',
+                borderLeftColor: 'var(--wa-header)',
+              }}
+            >
+              {message.replyToSender && (
+                <p className="font-semibold truncate" style={{ color: 'var(--wa-header)' }}>
+                  {message.replyToSender}
                 </p>
               )}
+              <p className="truncate" style={{ color: 'var(--wa-timestamp)' }}>{message.replyToText}</p>
             </div>
           )}
 
-          {message.contentType === 'video' && message.mediaUrl && (
-            <video src={displayUrl(message.mediaUrl)!} controls className="max-w-full max-h-72 rounded-md" />
-          )}
-
-          {message.contentType === 'audio' && message.mediaUrl && (
-            <audio src={displayUrl(message.mediaUrl)!} controls className="w-52" />
-          )}
-
-          {message.contentType === 'document' && (
-            <a
-              href={displayUrl(message.mediaUrl) ?? '#'}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-2 rounded-md p-2 hover:opacity-80"
-              style={{ background: isOut ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0.04)' }}
-            >
-              <div
-                className="h-9 w-9 flex-shrink-0 rounded flex items-center justify-center text-white text-xs font-bold"
-                style={{ background: 'var(--wa-header)' }}
+          {/* Content */}
+          <div className="px-2 pt-1.5 pb-1">
+            {message.contentType === 'text' && (
+              <p
+                className="text-sm leading-relaxed whitespace-pre-wrap break-words"
+                style={{ color: 'var(--wa-bubble-out-text)' }}
               >
-                DOC
+                {message.text}
+                <span className="inline-block w-14" aria-hidden />
+              </p>
+            )}
+
+            {message.contentType === 'image' && message.mediaUrl && (
+              <div className="overflow-hidden rounded-md">
+                <img
+                  src={displayUrl(message.mediaUrl)!}
+                  alt="image"
+                  className="max-w-full max-h-72 object-contain rounded-md cursor-zoom-in"
+                  onClick={(e) => { e.stopPropagation(); setLightboxUrl(displayUrl(message.mediaUrl)!) }}
+                />
+                {message.text && (
+                  <p className="mt-1 text-sm" style={{ color: 'var(--wa-bubble-out-text)' }}>
+                    {message.text}
+                    <span className="inline-block w-14" aria-hidden />
+                  </p>
+                )}
               </div>
-              <span className="text-xs truncate max-w-[150px]" style={{ color: 'var(--wa-bubble-out-text)' }}>
-                {message.mediaFilename ?? 'Document'}
-              </span>
-              <span className="inline-block w-8" aria-hidden />
-            </a>
-          )}
+            )}
 
-          {message.contentType === 'location' && (
-            <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--wa-bubble-out-text)' }}>
-              <span>📍</span>
-              <span>{message.text ?? 'Location'}</span>
-              <span className="inline-block w-10" aria-hidden />
-            </div>
-          )}
+            {message.contentType === 'video' && message.mediaUrl && (
+              <video src={displayUrl(message.mediaUrl)!} controls className="max-w-full max-h-72 rounded-md" />
+            )}
 
-          {message.contentType === 'unsupported' && (
-            <p className="text-xs italic" style={{ color: 'var(--wa-timestamp)' }}>
-              {message.text ?? 'Unsupported message type'}
-              <span className="inline-block w-10" aria-hidden />
-            </p>
-          )}
-        </div>
+            {message.contentType === 'audio' && message.mediaUrl && (
+              <audio src={displayUrl(message.mediaUrl)!} controls className="w-52" />
+            )}
 
-        {/* Timestamp + status */}
-        <div
-          className="absolute bottom-1 right-2 flex items-center gap-0.5 select-none"
-          style={{ color: 'var(--wa-timestamp)' }}
-        >
-          {message.starred && <IconStar size={10} filled className="text-yellow-400 mr-0.5" />}
-          <span className="text-[10px]">{time}</span>
-          {isOut && <TickIcon status={message.status} />}
+            {message.contentType === 'document' && (
+              <a
+                href={displayUrl(message.mediaUrl) ?? '#'}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 rounded-md p-2 hover:opacity-80"
+                style={{ background: isOut ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0.04)' }}
+              >
+                <div
+                  className="h-9 w-9 flex-shrink-0 rounded flex items-center justify-center text-white text-xs font-bold"
+                  style={{ background: 'var(--wa-header)' }}
+                >
+                  DOC
+                </div>
+                <span className="text-xs truncate max-w-[150px]" style={{ color: 'var(--wa-bubble-out-text)' }}>
+                  {message.mediaFilename ?? 'Document'}
+                </span>
+                <span className="inline-block w-8" aria-hidden />
+              </a>
+            )}
+
+            {message.contentType === 'location' && (
+              <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--wa-bubble-out-text)' }}>
+                <span>📍</span>
+                <span>{message.text ?? 'Location'}</span>
+                <span className="inline-block w-10" aria-hidden />
+              </div>
+            )}
+
+            {message.contentType === 'unsupported' && (
+              <p className="text-xs italic" style={{ color: 'var(--wa-timestamp)' }}>
+                {message.text ?? 'Unsupported message type'}
+                <span className="inline-block w-10" aria-hidden />
+              </p>
+            )}
+          </div>
+
+          {/* Timestamp + status */}
+          <div
+            className="absolute bottom-1 right-2 flex items-center gap-0.5 select-none"
+            style={{ color: 'var(--wa-timestamp)' }}
+          >
+            {message.starred && <IconStar size={10} filled className="text-yellow-400 mr-0.5" />}
+            <span className="text-[10px]">{time}</span>
+            {isOut && <TickIcon status={message.status} />}
+          </div>
         </div>
       </div>
-    </div>
     </>
   )
-}
+})
