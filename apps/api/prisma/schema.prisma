@@ -164,9 +164,11 @@ model SavedReply {
   text      String
   mediaUrl  String?  @map("media_url")
   mediaType String?  @map("media_type")
+  category  String?  @map("category")  // e.g. "Products", "Videos", "General"
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@index([category])
   @@map("saved_replies")
 }
 

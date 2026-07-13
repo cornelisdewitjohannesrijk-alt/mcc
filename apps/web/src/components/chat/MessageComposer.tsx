@@ -13,6 +13,7 @@ interface SavedReply {
   text: string
   mediaUrl?: string | null
   mediaType?: string | null
+  category?: string | null
 }
 
 interface FilePreview {
@@ -41,6 +42,7 @@ export function MessageComposer({ onSend, replyTo, onReplyCancel, disabled, plac
   const [uploading, setUploading] = useState(false)
   const [showReplies, setShowReplies] = useState(false)
   const [replySearch, setReplySearch] = useState('')
+  const [activeCategory, setActiveCategory] = useState<string | null>(null)
 
   // Voice recording
   const [recording, setRecording] = useState(false)
@@ -65,10 +67,18 @@ export function MessageComposer({ onSend, replyTo, onReplyCancel, disabled, plac
   })
   const savedReplies = savedRepliesData?.savedReplies ?? []
 
-  // Filter saved replies by search term (after the /)
-  const filteredReplies = savedReplies.filter((r) =>
-    r.shortcut.includes(replySearch) || r.title.toLowerCase().includes(replySearch.toLowerCase())
-  )
+  // All unique categories
+  const categories = Array.from(new Set(savedReplies.map((r) => r.category).filter(Boolean))) as string[]
+
+  // Filter saved replies by search term (after the /) and active category
+  const filteredReplies = savedReplies.filter((r) => {
+    const matchesSearch = !replySearch || r.shortcut.includes(replySearch) || r.title.toLowerCase().includes(replySearch.toLowerCase())
+    const matchesCategory = !activeCategory || r.category === activeCategory
+    return matchesSearch && matchesCategory
+  })
+
+  const mediaReplies = filteredReplies.filter((r) => r.mediaUrl)
+  const textReplies = filteredReplies.filter((r) => !r.mediaUrl)
 
   // Auto-resize textarea
   useEffect(() => {
@@ -99,6 +109,7 @@ export function MessageComposer({ onSend, replyTo, onReplyCancel, disabled, plac
       setShowReplies(true)
     } else {
       setShowReplies(false)
+      setActiveCategory(null)
     }
   }
 
@@ -305,44 +316,130 @@ export function MessageComposer({ onSend, replyTo, onReplyCancel, disabled, plac
       )}
 
       {/* ── Saved replies popup ─────────────────────────────────────────────── */}
-      {showReplies && filteredReplies.length > 0 && (
+      {showReplies && (
         <div
           ref={repliesRef}
-          className="absolute bottom-full left-0 right-0 mx-3 mb-1 rounded-lg shadow-lg overflow-hidden z-10"
-          style={{ border: '1px solid var(--wa-divider)', background: 'var(--wa-panel-bg)', maxHeight: '240px', overflowY: 'auto' }}
+          className="absolute bottom-full left-0 right-0 mx-3 mb-1 rounded-xl shadow-2xl z-10 flex flex-col"
+          style={{ border: '1px solid var(--wa-divider)', background: 'var(--wa-panel-bg)', maxHeight: '420px' }}
         >
-          <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide border-b" style={{ color: 'var(--wa-timestamp)', borderColor: 'var(--wa-divider)' }}>
-            Saved Replies
+          {/* Header */}
+          <div className="flex items-center justify-between px-3 py-2 border-b flex-shrink-0" style={{ borderColor: 'var(--wa-divider)' }}>
+            <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--wa-timestamp)' }}>
+              Saved Replies {replySearch && <span style={{ color: 'var(--wa-header)' }}>· /{replySearch}</span>}
+            </span>
+            <span className="text-[11px]" style={{ color: 'var(--wa-timestamp)' }}>{filteredReplies.length} result{filteredReplies.length !== 1 ? 's' : ''}</span>
           </div>
-          {filteredReplies.map((reply) => (
-            <button
-              key={reply.id}
-              className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-black/5 text-left transition-colors"
-              onMouseDown={(e) => { e.preventDefault(); insertReply(reply) }}
-            >
-              {reply.mediaUrl && reply.mediaType?.startsWith('image/') ? (
-                <img src={reply.mediaUrl} alt="" className="h-10 w-10 rounded object-cover flex-shrink-0" />
-              ) : (
-                <span
-                  className="flex-shrink-0 text-xs font-bold px-1.5 py-0.5 rounded"
-                  style={{ background: 'var(--wa-header)', color: 'white', minWidth: '28px', textAlign: 'center' }}
+
+          {/* Category tabs */}
+          {categories.length > 0 && (
+            <div className="flex gap-1.5 px-3 py-2 border-b overflow-x-auto flex-shrink-0 scrollbar-hide" style={{ borderColor: 'var(--wa-divider)' }}>
+              <button
+                onMouseDown={(e) => { e.preventDefault(); setActiveCategory(null) }}
+                className="flex-shrink-0 text-xs px-2.5 py-1 rounded-full font-medium transition-colors"
+                style={{
+                  background: activeCategory === null ? 'var(--wa-header)' : 'var(--wa-search-bg)',
+                  color: activeCategory === null ? 'white' : 'var(--wa-bubble-out-text)',
+                }}
+              >
+                All
+              </button>
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  onMouseDown={(e) => { e.preventDefault(); setActiveCategory(activeCategory === cat ? null : cat) }}
+                  className="flex-shrink-0 text-xs px-2.5 py-1 rounded-full font-medium transition-colors"
+                  style={{
+                    background: activeCategory === cat ? 'var(--wa-header)' : 'var(--wa-search-bg)',
+                    color: activeCategory === cat ? 'white' : 'var(--wa-bubble-out-text)',
+                  }}
                 >
-                  /{reply.shortcut}
-                </span>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-medium truncate" style={{ color: 'var(--wa-bubble-out-text)' }}>{reply.title}</p>
-                  {reply.mediaUrl && (
-                    <span className="text-xs" style={{ color: 'var(--wa-timestamp)' }}>/{reply.shortcut}</span>
-                  )}
-                </div>
-                <p className="text-xs truncate" style={{ color: 'var(--wa-timestamp)' }}>
-                  {reply.text || (reply.mediaUrl ? '📎 Image' : '')}
-                </p>
-              </div>
-            </button>
-          ))}
+                  {cat}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Content */}
+          <div className="overflow-y-auto flex-1">
+            {filteredReplies.length === 0 ? (
+              <p className="text-sm text-center py-8" style={{ color: 'var(--wa-timestamp)' }}>No saved replies found</p>
+            ) : (
+              <>
+                {/* Media grid */}
+                {mediaReplies.length > 0 && (
+                  <div className="p-2">
+                    {textReplies.length > 0 && (
+                      <p className="text-[10px] font-semibold uppercase tracking-wide px-1 pb-1.5" style={{ color: 'var(--wa-timestamp)' }}>Media</p>
+                    )}
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {mediaReplies.map((reply) => (
+                        <button
+                          key={reply.id}
+                          onMouseDown={(e) => { e.preventDefault(); insertReply(reply) }}
+                          className="relative rounded-lg overflow-hidden aspect-square group"
+                          style={{ background: 'var(--wa-search-bg)' }}
+                          title={reply.title}
+                        >
+                          {reply.mediaType?.startsWith('image/') ? (
+                            <img src={reply.mediaUrl!} alt={reply.title} className="w-full h-full object-cover" />
+                          ) : reply.mediaType?.startsWith('video/') ? (
+                            <div className="w-full h-full flex flex-col items-center justify-center gap-1">
+                              <span className="text-2xl">🎬</span>
+                              <span className="text-[9px] font-medium px-1 text-center leading-tight" style={{ color: 'var(--wa-timestamp)' }}>
+                                {reply.title}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <span className="text-2xl">📎</span>
+                            </div>
+                          )}
+                          {/* Hover overlay */}
+                          <div
+                            className="absolute inset-0 flex flex-col items-center justify-end p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 60%)' }}
+                          >
+                            <p className="text-white text-[10px] font-medium text-center leading-tight truncate w-full">{reply.title}</p>
+                            <p className="text-white/70 text-[9px]">/{reply.shortcut}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Text replies list */}
+                {textReplies.length > 0 && (
+                  <div className={mediaReplies.length > 0 ? 'border-t' : ''} style={{ borderColor: 'var(--wa-divider)' }}>
+                    {mediaReplies.length > 0 && (
+                      <p className="text-[10px] font-semibold uppercase tracking-wide px-3 pt-2 pb-1" style={{ color: 'var(--wa-timestamp)' }}>Text</p>
+                    )}
+                    {textReplies.map((reply) => (
+                      <button
+                        key={reply.id}
+                        className="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
+                        style={{ borderBottom: '1px solid var(--wa-divider)' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--wa-hover)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                        onMouseDown={(e) => { e.preventDefault(); insertReply(reply) }}
+                      >
+                        <span
+                          className="flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded"
+                          style={{ background: 'var(--wa-header)', color: 'white', minWidth: '32px', textAlign: 'center' }}
+                        >
+                          /{reply.shortcut}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate" style={{ color: 'var(--wa-bubble-out-text)' }}>{reply.title}</p>
+                          <p className="text-xs truncate" style={{ color: 'var(--wa-timestamp)' }}>{reply.text}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
 

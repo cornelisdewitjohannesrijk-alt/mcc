@@ -22,6 +22,7 @@ export async function savedRepliesRoutes(app: FastifyInstance) {
       text: z.string().max(4096).default(''),
       mediaUrl: z.string().url().optional(),
       mediaType: z.string().optional(),
+      category: z.string().max(100).optional(),
     })
 
     const result = schema.safeParse(req.body)
@@ -50,6 +51,7 @@ export async function savedRepliesRoutes(app: FastifyInstance) {
       text: z.string().max(4096).optional(),
       mediaUrl: z.string().url().optional().nullable(),
       mediaType: z.string().optional().nullable(),
+      category: z.string().max(100).optional().nullable(),
     })
 
     const result = schema.safeParse(req.body)
