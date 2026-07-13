@@ -122,21 +122,37 @@ export function ChatPanel({ conversationId }: { conversationId: string }) {
   const { data, isLoading } = useQuery<{ conversation: Conversation }>({
     queryKey: ['conversation', conversationId],
     queryFn: () => api.get(`/conversations/${conversationId}`).then((r) => r.data),
-    staleTime: 30_000, // don't refetch if we opened this chat in the last 30s
+    staleTime: 0, // always refetch in background so messages are never stale
     refetchOnWindowFocus: false,
   })
 
   const conversation = data?.conversation
 
-  // Populate local messages when conversation data arrives
-  // conversation?.id as dep: fires once per conversation load (cache or network)
+  // Sync cache → localMessages whenever the query data changes.
+  // Uses a merge strategy so socket-appended messages and cache updates
+  // (from setQueryData or background refetches) are both reflected instantly.
   useEffect(() => {
     if (!conversation) return
-    setLocalMessages(conversation.messages)
+    setLocalMessages((prev) => {
+      if (prev.length === 0) {
+        // Fresh mount — take cache as-is and arm scroll-to-bottom
+        scrolledToBottomRef.current = false
+        return conversation.messages
+      }
+      // Merge: keep everything already in local state, add anything new from cache
+      const map = new Map<string, Message>()
+      for (const m of prev) map.set(m.id, m)
+      let added = false
+      for (const m of conversation.messages) {
+        if (!map.has(m.id)) { map.set(m.id, m); added = true }
+      }
+      if (!added) return prev // no change — skip re-render
+      return Array.from(map.values()).sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+      )
+    })
     setHasMore(conversation.hasMoreMessages ?? false)
-    setFirstItemIndex(ITEM_START)
-    scrolledToBottomRef.current = false // arm the scroll-to-bottom
-  }, [conversation?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [conversation]) // re-run on every cache update, not just ID change
 
   // ── Mark read ─────────────────────────────────────────────────────────────
   useEffect(() => {
