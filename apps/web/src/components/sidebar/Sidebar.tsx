@@ -61,7 +61,7 @@ export function Sidebar() {
     <div className="flex h-full flex-col" style={{ borderRight: '1px solid var(--wa-divider)' }}>
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div
-        className="flex items-center justify-between px-4 py-3 flex-shrink-0"
+        className="flex items-center justify-between px-4 py-3 flex-shrink-0 safe-area-top"
         style={{ background: 'var(--wa-header)' }}
       >
         <div className="flex items-center gap-3">

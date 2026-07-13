@@ -287,7 +287,7 @@ export function MessageComposer({ onSend, replyTo, onReplyCancel, disabled, plac
   }
 
   return (
-    <div className="flex-shrink-0 relative" style={{ background: 'var(--wa-search-bg)', borderTop: '1px solid var(--wa-divider)' }}>
+    <div className="flex-shrink-0 relative safe-area-bottom" style={{ background: 'var(--wa-search-bg)', borderTop: '1px solid var(--wa-divider)' }}>
 
       {/* ── Reply-to bar ────────────────────────────────────────────────────── */}
       {replyTo && (
